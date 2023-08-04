@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <?pde version="3.8"?>
-<target name="cdt" sequenceNumber="143">
+<target name="cdt" sequenceNumber="144">
 	<locations>
 		<location includeAllPlatforms="false" includeConfigurePhase="false" includeMode="planner" includeSource="true" type="InstallableUnit">
 			<repository location="https://download.eclipse.org/cbi/updates/license/" />
@@ -142,12 +142,6 @@
 					<version>2.2</version>
 					<type>jar</type>
 				</dependency>
-				<dependency>
-					<groupId>org.hamcrest</groupId>
-					<artifactId>hamcrest</artifactId>
-					<version>2.2</version>
-					<type>jar</type>
-				</dependency>
 			</dependencies>
 		</location>
 		<location includeDependencyDepth="none" includeDependencyScopes="compile" includeSource="true" label="ASM" missingManifest="error" type="Maven">
@@ -196,14 +190,14 @@
 			</dependencies>
 		</location>
 		<location includeAllPlatforms="false" includeConfigurePhase="false" includeMode="planner" includeSource="true" type="InstallableUnit">
-			<repository location="https://download.eclipse.org/tools/orbit/simrel/orbit-aggregation/2023-09"/>
+			<repository location="https://download.eclipse.org/tools/orbit/simrel/orbit-aggregation/nightly/"/>
 			<!-- failureaccess is needed because the Linuxtools depends on it but doesn't republish it - https://github.com/eclipse-linuxtools/org.eclipse.linuxtools/issues/232
 			This dep can't be added to maven section because of https://github.com/eclipse-pde/eclipse.pde/issues/675 -->
 			<unit id="com.google.guava.failureaccess" version="0.0.0" />
 
 			<unit id="javax.inject" version="0.0.0" />
-			<unit id="org.hamcrest.core" version="1.3.0.v20230721-0740" />
-			<unit id="org.hamcrest.library" version="1.3.0.v20180524-2246" />
+			<unit id="org.hamcrest.core" version="1.3.0.v20230802-0819" />
+			<unit id="org.hamcrest.library" version="1.3.0.v20230802-0819" />
 			<unit id="org.junit" version="4.13.2.v20230725-0701" />
 		</location>
 	</locations>
