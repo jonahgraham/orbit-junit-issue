@@ -1,0 +1,799 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright (c) 2011, 2020 Wind River Systems, Inc. and others.
+
+   This program and the accompanying materials
+   are made available under the terms of the Eclipse Public License 2.0
+   which accompanies this distribution, and is available at
+   https://www.eclipse.org/legal/epl-2.0/
+
+   SPDX-License-Identifier: EPL-2.0
+-->
+<project
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"
+	xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<modelVersion>4.0.0</modelVersion>
+
+	<prerequisites>
+		<maven>${required-maven-version}</maven>
+	</prerequisites>
+
+	<groupId>org.eclipse.cdt</groupId>
+	<artifactId>cdt-parent</artifactId>
+	<version>11.3.0-SNAPSHOT</version>
+	<packaging>pom</packaging>
+	<name>CDT Parent</name>
+
+	<properties>
+		<!-- Maven 3.6.1 and 3.6.2 do not work with Tycho, see Bug 551674
+		     CDT enforces a minimum of 3.6.3 because that is what CDT's CI
+			 runs with. It may work with older versions, but this is not
+			 tested or supported. -->
+		<required-maven-version>3.6.3</required-maven-version>
+		<tycho-version>3.0.5</tycho-version>
+		<cbi-plugins.version>1.3.4</cbi-plugins.version>
+		<sonar.core.codeCoveragePlugin>jacoco</sonar.core.codeCoveragePlugin>
+		<cdt-site>http://ci.eclipse.org/cdt/job/cdt-master/lastSuccessfulBuild/artifact/releng/org.eclipse.cdt.repo/target/repository</cdt-site>
+		<simrel-site>https://download.eclipse.org/staging/2023-09/</simrel-site>
+		<repo-path>tools/cdt/builds/master/nightly</repo-path>
+		<sonar.dynamicAnalysis>reuseReports</sonar.dynamicAnalysis>
+		<sonar.jacoco.reportPath>${project.basedir}/../../target/jacoco.exec</sonar.jacoco.reportPath>
+		<sonar.java.source>11</sonar.java.source>
+		<target-platform>cdt</target-platform>
+
+		<!-- When changing this value, consider also bumping the version numbers of all the docs plug-ins (those with build-doc profile in pom.xml)
+		     so that compare&replace does not replace the the newly built docs because the only change is in the filtered out index/* resources. -->
+		<help-docs-eclipserun-repo>https://download.eclipse.org/eclipse/updates/4.28/R-4.28-202306050440/</help-docs-eclipserun-repo>
+
+		<tycho.scmUrl>scm:git:https://github.com/eclipse-cdt/cdt</tycho.scmUrl>
+		<!-- Some old tests, like CDescriptorOldTests, fail due to reflection access. Therefore we add-opens to make that pass -->
+		<base.test.vmargs>-Xms256m -Xmx512m -ea --add-opens=java.xml/com.sun.org.apache.xerces.internal.dom=ALL-UNNAMED</base.test.vmargs>
+		<comparator.repo>https://download.eclipse.org/tools/cdt/releases/11.2/cdt-11.2.0/</comparator.repo>
+		<!-- these parameters are to control baseline replace and compare. On a local build you want
+		     to avoid baseline replace and compare, especially if you have different versions of Java than
+			 the baseline was built with. This is the default.
+
+			 If you have the same version of Java as the build machine you can run baseline comparison and
+			 replace. To do that run with the baseline-compare-and-replace profile.
+	    -->
+		<compare-version-with-baselines.skip>true</compare-version-with-baselines.skip>
+		<replace-version-with-baselines.mode>disable</replace-version-with-baselines.mode>
+		<replace-version-with-baselines.replace>none</replace-version-with-baselines.replace>
+		<!--
+			Valid options: error, warning, and ignore
+			jgit.dirtyWorkingTree checking was added as of Tycho 0.19.0
+			see: https://bugs.eclipse.org/419030
+		-->
+		<jgit.dirtyWorkingTree-cdtDefault>error</jgit.dirtyWorkingTree-cdtDefault>
+		<!-- By default cdt-other.skip.tests will be false as none of
+		     the skip-tests profiles will be activated. When one is
+		     activated, this allows us to skip all other cdt tests not
+		     explicitly skipped further down the pom hierarchy.
+		     Recall that the command line will take precedence, so
+		     -DskipTests will override anything else as normal maven
+		     users expect. -->
+		<skipTests>${cdt-other.skip.tests}</skipTests>
+		<dsf.gdb.tests.gdbPath></dsf.gdb.tests.gdbPath>
+		<cdt.tests.dsf.gdb.versions></cdt.tests.dsf.gdb.versions>
+		<maven.build.timestamp.format>yyyyMMdd-HHmm</maven.build.timestamp.format>
+		<buildTimestamp>${maven.build.timestamp}</buildTimestamp>
+	    <buildId>${buildTimestamp}</buildId>
+	</properties>
+
+	<licenses>
+		<license>
+			<name>Eclipse Public License 2.0</name>
+			<comments>
+       
+
+       This program and the accompanying materials are made
+       available under the terms of the Eclipse Public License 2.0
+       which accompanies this distribution, and is available at
+       https://www.eclipse.org/legal/epl-2.0/
+       
+       SPDX-License-Identifier: EPL-2.0
+      </comments>
+		</license>
+	</licenses>
+
+	<modules>
+		<module>util/org.eclipse.cdt.util</module>
+
+		<module>releng/org.eclipse.cdt.target</module>
+	</modules>
+
+	<pluginRepositories>
+   		<pluginRepository>
+			<id>cbi</id>
+			<url>https://repo.eclipse.org/content/repositories/cbi-releases/</url>
+		</pluginRepository>
+  	</pluginRepositories>
+	<profiles>
+		<!-- Turn off doclint because javadocs are incomplete -->
+		<profile>
+			<id>disable-java8-doclint</id>
+			<activation>
+				<jdk>[1.8,)</jdk>
+			</activation>
+			<properties>
+				<doclint>none</doclint>
+			</properties>
+		</profile>
+		<!--
+		   Individual p2 repos can be turned on and off to allow building CDT, or parts of CDT against
+		   different target platforms easily.
+		   For example, you can:
+		    - test CDT against a pre-built CDT by using the cdtRepo profile.
+			- build the standalone rcp debugger against the latest simrel
+			   mvn verify -DuseSimrelRepo -f debug/org.eclipse.cdt.debug.application.product
+		-->
+		<profile>
+			<id>cdtRepo</id>
+			<repositories>
+				<repository>
+					<id>cdt.repo</id>
+					<url>${cdt-site}</url>
+					<layout>p2</layout>
+				</repository>
+			</repositories>
+		</profile>
+		<!-- See comment above cdtRepo profile -->
+		<profile>
+			<id>simrelRepo</id>
+			<activation>
+				<property>
+					<name>useSimrelRepo</name>
+				</property>
+			</activation>
+			<repositories>
+				<repository>
+					<id>simrel.repo</id>
+					<url>${simrel-site}</url>
+					<layout>p2</layout>
+				</repository>
+			</repositories>
+		</profile>
+		<!-- See comment above cdtRepo profile -->
+		<profile>
+			<id>defaultCdtTarget</id>
+			<activation>
+				<property>
+					<name>!useSimrelRepo</name>
+				</property>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.eclipse.tycho</groupId>
+						<artifactId>target-platform-configuration</artifactId>
+						<version>${tycho-version}</version>
+						<configuration>
+							<target>
+								<artifact>
+									<groupId>org.eclipse.cdt</groupId>
+									<artifactId>org.eclipse.cdt.target</artifactId>
+									<classifier>${target-platform}</classifier>
+									<version>1.0.0</version>
+								</artifact>
+							</target>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+		<profile>
+			<id>macosx</id>
+			<activation>
+				<os>
+					<family>mac</family>
+				</os>
+			</activation>
+			<properties>
+				<base.ui.test.vmargs>${base.test.vmargs} -XstartOnFirstThread</base.ui.test.vmargs>
+			</properties>
+		</profile>
+		<profile>
+			<id>other-os</id>
+			<activation>
+				<os>
+					<family>!mac</family>
+				</os>
+			</activation>
+			<properties>
+				<base.ui.test.vmargs>${base.test.vmargs}</base.ui.test.vmargs>
+			</properties>
+		</profile>
+		<profile>
+			<id>build-standalone-debugger-rcp</id>
+			<modules>
+				<module>debug/org.eclipse.cdt.debug.application.product</module>
+			</modules>
+		</profile>
+		<!-- Automatic profile for features that shouldn't generate sources -->
+		<profile>
+			<id>feature-no-source</id>
+			<activation>
+				<file>
+				<exists>feature-no-source.properties</exists>
+				</file>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.eclipse.tycho</groupId>
+						<artifactId>tycho-source-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>attach-feature-source</id>
+								<phase>none</phase>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+		<!-- Automatic profile to define the settings for UI test plugins -->
+		<profile>
+			<id>ui-test-plugin</id>
+			<activation>
+				<file>
+				<exists>ui-test-plugin.properties</exists>
+				</file>
+			</activation>
+			<build>
+				<plugins>
+				<plugin>
+					<groupId>org.eclipse.tycho</groupId>
+					<artifactId>tycho-surefire-plugin</artifactId>
+					<configuration>
+						<useUIHarness>true</useUIHarness>
+						<useUIThread>true</useUIThread>
+						<argLine>${tycho.testArgLine} ${base.ui.test.vmargs}</argLine>
+						<appArgLine>-pluginCustomization ${basedir}/../../releng/disable_intro_in_tests.ini</appArgLine>
+						<!-- using tags can cause all tests to be excluded, which is ok and should not fail the build -->
+						<failIfNoTests>false</failIfNoTests>
+					</configuration>
+				</plugin>
+				</plugins>
+			</build>
+		</profile>
+		<!-- Automatic profile to define the settings for SWTBot test plugins -->
+		<profile>
+			<id>swtbot-test-plugin</id>
+			<activation>
+				<file>
+				<exists>swtbot-test-plugin.properties</exists>
+				</file>
+			</activation>
+			<build>
+				<plugins>
+				<plugin>
+					<groupId>org.eclipse.tycho</groupId>
+					<artifactId>tycho-surefire-plugin</artifactId>
+					<configuration>
+						<useUIHarness>true</useUIHarness>
+						<useUIThread>false</useUIThread>
+						<argLine>${tycho.testArgLine} ${base.ui.test.vmargs}</argLine>
+						<appArgLine>-pluginCustomization ${basedir}/../../releng/disable_intro_in_tests.ini</appArgLine>
+						<!-- using tags can cause all tests to be excluded, which is ok and should not fail the build -->
+						<failIfNoTests>false</failIfNoTests>
+					</configuration>
+				</plugin>
+				</plugins>
+			</build>
+		</profile>
+		<profile>
+			<id>about-mappings</id>
+			<activation>
+				<file>
+					<exists>about.mappings</exists>
+				</file>
+			</activation>
+			<build>
+				<resources>
+          <resource>
+			<directory>.</directory>
+				<filtering>true</filtering>
+					<includes>
+						<include>about.mappings</include>
+					</includes>
+				</resource>
+			</resources>
+			</build>
+		</profile>
+		<profile>
+			<id>skip-all-tests</id>
+			<properties>
+				<cdt-ui.skip.tests>true</cdt-ui.skip.tests>
+				<dsf-gdb.skip.tests>true</dsf-gdb.skip.tests>
+				<cdt-other.skip.tests>true</cdt-other.skip.tests>
+			</properties>
+		</profile>
+		<profile>
+			<id>skip-tests-except-cdt-ui</id>
+			<properties>
+				<dsf-gdb.skip.tests>true</dsf-gdb.skip.tests>
+				<cdt-other.skip.tests>true</cdt-other.skip.tests>
+			</properties>
+		</profile>
+		<profile>
+			<id>skip-tests-except-dsf-gdb</id>
+			<properties>
+				<cdt-ui.skip.tests>true</cdt-ui.skip.tests>
+				<cdt-other.skip.tests>true</cdt-other.skip.tests>
+			</properties>
+		</profile>
+		<profile>
+			<id>skip-tests-except-cdt-other</id>
+			<properties>
+				<cdt-ui.skip.tests>true</cdt-ui.skip.tests>
+				<dsf-gdb.skip.tests>true</dsf-gdb.skip.tests>
+			</properties>
+		</profile>
+		<profile>
+			<id>baseline-compare-and-replace</id>
+			<properties>
+				<compare-version-with-baselines.skip>false</compare-version-with-baselines.skip>
+				<replace-version-with-baselines.mode>fail</replace-version-with-baselines.mode>
+				<replace-version-with-baselines.replace>all</replace-version-with-baselines.replace>
+			</properties>
+		</profile>
+		<profile>
+			<id>production</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.eclipse.tycho</groupId>
+						<artifactId>target-platform-configuration</artifactId>
+						<version>${tycho-version}</version>
+						<configuration>
+							<includePackedArtifacts>true</includePackedArtifacts>
+						</configuration>
+					</plugin>
+					<plugin>
+						<groupId>org.eclipse.cbi.maven.plugins</groupId>
+						<artifactId>eclipse-jarsigner-plugin</artifactId>
+						<version>${cbi-plugins.version}</version>
+						<executions>
+							<execution>
+								<id>sign</id>
+								<phase>verify</phase>
+								<goals>
+									<goal>sign</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
+						<groupId>org.eclipse.tycho</groupId>
+						<artifactId>tycho-p2-plugin</artifactId>
+						<version>${tycho-version}</version>
+						<executions>
+							<execution>
+								<id>p2-metadata</id>
+								<goals>
+									<goal>p2-metadata</goal>
+								</goals>
+								<phase>verify</phase>
+							</execution>
+						</executions>
+						<configuration>
+							<defaultP2Metadata>false</defaultP2Metadata>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
+	<build>
+		<plugins>
+			<plugin>
+				<inherited>true</inherited>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-enforcer-plugin</artifactId>
+				<version>3.2.1</version>
+				<executions>
+				<execution>
+					<id>enforce-maven-version</id>
+					<goals>
+						<goal>enforce</goal>
+					</goals>
+					<configuration>
+						<rules>
+							<requireMavenVersion>
+								<version>${required-maven-version}</version>
+							</requireMavenVersion>
+							<requireJavaVersion>
+								<version>11</version>
+							</requireJavaVersion>
+						</rules>
+						<fail>true</fail>
+						<failFast>true</failFast>
+					</configuration>
+				</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>sonar-maven-plugin</artifactId>
+				<version>2.4</version>
+			</plugin>
+			<plugin>
+				<groupId>org.eclipse.tycho</groupId>
+				<artifactId>tycho-maven-plugin</artifactId>
+				<version>${tycho-version}</version>
+				<extensions>true</extensions>
+			</plugin>
+			<plugin>
+				<groupId>org.eclipse.tycho</groupId>
+				<artifactId>target-platform-configuration</artifactId>
+				<version>${tycho-version}</version>
+				<configuration>
+					<resolver>p2</resolver>
+					<pomDependencies>consider</pomDependencies>
+					<environments>
+						<environment>
+							<os>linux</os>
+							<ws>gtk</ws>
+							<arch>x86_64</arch>
+						</environment>
+						<environment>
+							<os>linux</os>
+							<ws>gtk</ws>
+							<arch>aarch64</arch>
+						</environment>
+						<environment>
+							<os>linux</os>
+							<ws>gtk</ws>
+							<arch>ppc64le</arch>
+						</environment>
+						<environment>
+							<os>win32</os>
+							<ws>win32</ws>
+							<arch>x86_64</arch>
+						</environment>
+						<environment>
+							<os>macosx</os>
+							<ws>cocoa</ws>
+							<arch>x86_64</arch>
+						</environment>
+						<environment>
+							<os>macosx</os>
+							<ws>cocoa</ws>
+							<arch>aarch64</arch>
+						</environment>
+					</environments>
+					<dependency-resolution>
+						<extraRequirements>
+							<requirement>
+								<type>eclipse-plugin</type>
+								<id>org.eclipse.ui.ide</id>
+								<versionRange>0.0.0</versionRange>
+							</requirement>
+						</extraRequirements>
+					</dependency-resolution>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.eclipse.tycho</groupId>
+				<artifactId>tycho-source-plugin</artifactId>
+				<configuration>
+					<encoding>UTF-8</encoding>
+				</configuration>
+				<executions>
+					<execution>
+						<id>attach-source</id>
+						<goals>
+							<goal>plugin-source</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>attach-feature-source</id>
+						<phase>package</phase>
+						<goals>
+							<goal>feature-source</goal>
+						</goals>
+						<configuration>
+							<includeBinaryFeature>false</includeBinaryFeature>
+							<excludes>
+								<plugin id="org.eclipse.cdt.autotools.docs"/>
+								<plugin id="org.eclipse.cdt.meson.docs"/>
+								<plugin id="org.eclipse.cdt.core.linux.ppc64le"/>
+								<plugin id="org.eclipse.cdt.core.linux.x86_64"/>
+								<plugin id="org.eclipse.cdt.core.linux.aarch64"/>
+								<plugin id="org.eclipse.cdt.core.win32.x86_64"/>
+								<plugin id="org.eclipse.cdt.debug.application.doc"/>
+								<plugin id="org.eclipse.cdt.doc.user"/>
+								<plugin id="org.eclipse.cdt.debug.gdbjtag"/>
+								<plugin id="org.eclipse.cdt"/>
+								<plugin id="net.sourceforge.lpg.lpgjavaruntime"/>
+								<plugin id="org.eclipse.ant.optional.junit"/>
+								<plugin id="org.eclipse.cdt.testing"/>
+								<plugin id="org.eclipse.remote.proxy.server.linux.x86_64"/>
+								<plugin id="org.eclipse.remote.proxy.server.linux.ppc64le"/>
+								<plugin id="org.eclipse.remote.proxy.server.macosx.x86_64"/>
+								<plugin id="org.eclipse.remote.doc.isv"/>
+							</excludes>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.eclipse.tycho</groupId>
+				<artifactId>tycho-p2-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>attached-p2-metadata</id>
+						<phase>package</phase>
+						<goals>
+							<goal>p2-metadata</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>0.8.8</version>
+				<executions>
+					<execution>
+						<id>pre-test</id>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+						<configuration>
+						<!-- Where to put jacoco coverage report -->
+							<destFile>${sonar.jacoco.reportPath}</destFile>
+							<includes>
+								<include>org.eclipse.cdt.*</include>
+							</includes>
+							<append>true</append>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.eclipse.tycho.extras</groupId>
+				<artifactId>tycho-p2-extras-plugin</artifactId>
+				<version>${tycho-version}</version>
+				<executions>
+					<execution> <!-- Checks versions are properly bumped from one stream to the other -->
+						<id>compare-attached-artifacts-with-release</id>
+						<goals>
+							<goal>compare-version-with-baselines</goal>
+						</goals>
+						<configuration>
+							<skip>${compare-version-with-baselines.skip}</skip>
+							<baselines>
+								<baseline>${comparator.repo}</baseline> <!-- Previous release) -->
+							</baselines>
+							<comparator>zip</comparator>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+		<pluginManagement>
+			<plugins>
+				<plugin>
+					<groupId>org.eclipse.tycho</groupId>
+					<artifactId>tycho-compiler-plugin</artifactId>
+					<version>${tycho-version}</version>
+					<configuration>
+						<encoding>UTF-8</encoding>
+					</configuration>
+				</plugin>
+				<!-- enable source bundle generation -->
+				<plugin>
+					<groupId>org.eclipse.tycho</groupId>
+					<artifactId>tycho-source-plugin</artifactId>
+					<version>${tycho-version}</version>
+				</plugin>
+				<plugin>
+					<groupId>org.eclipse.tycho</groupId>
+					<artifactId>tycho-packaging-plugin</artifactId>
+					<version>${tycho-version}</version>
+					<configuration>
+						<deriveHeaderFromProject>false</deriveHeaderFromProject>
+						<format>${qualifier.format}</format>
+						<timestampProvider>jgit</timestampProvider>
+						<jgit.ignore>
+							pom.xml
+							.polyglot.*
+						</jgit.ignore>
+						<jgit.dirtyWorkingTree>${jgit.dirtyWorkingTree-cdtDefault}</jgit.dirtyWorkingTree>
+						<sourceReferences>
+							<generate>true</generate>
+						</sourceReferences>
+						<additionalFileSets>
+							<fileSet>
+								<directory>${project.build.outputDirectory}</directory>
+								<includes>
+									<include>about.mappings</include>
+								</includes>
+							</fileSet>
+						</additionalFileSets>
+					</configuration>
+					<dependencies>
+						<dependency>
+							<groupId>org.eclipse.tycho</groupId>
+							<artifactId>tycho-buildtimestamp-jgit</artifactId>
+							<version>${tycho-version}</version>
+						</dependency>
+						<dependency>
+							<groupId>org.eclipse.tycho.extras</groupId>
+							<artifactId>tycho-sourceref-jgit</artifactId>
+							<version>${tycho-version}</version>
+						</dependency>
+					</dependencies>
+				</plugin>
+				<plugin>
+					<groupId>org.eclipse.tycho</groupId>
+					<artifactId>tycho-surefire-plugin</artifactId>
+					<version>${tycho-version}</version>
+					<configuration>
+						<!-- Default configuration, UI tests may have to override these -->
+						<useUIHarness>false</useUIHarness>
+						<useUIThread>false</useUIThread>
+						<dependencies>
+							<dependency>
+								<type>p2-installable-unit</type>
+								<artifactId>org.eclipse.platform.feature.group</artifactId>
+							</dependency>
+						</dependencies>
+						<product>org.eclipse.platform.ide</product>
+						<argLine>${tycho.testArgLine} ${base.test.vmargs}</argLine>
+						<appArgLine>-pluginCustomization ${basedir}/../../releng/disable_intro_in_tests.ini</appArgLine>
+						<!-- using tags can cause all tests to be excluded, which is ok and should not fail the build -->
+						<failIfNoTests>false</failIfNoTests>
+					</configuration>
+				</plugin>
+				<plugin>
+					<groupId>org.eclipse.tycho</groupId>
+					<artifactId>tycho-p2-plugin</artifactId>
+					<version>${tycho-version}</version>
+					<executions>
+						<execution>
+							<id>baselinereplace-p2-metadata</id>
+							<goals>
+								<goal>p2-metadata</goal>
+							</goals>
+							<phase>verify</phase>
+							<configuration>
+								<baselineMode>${replace-version-with-baselines.mode}</baselineMode>
+								<baselineReplace>${replace-version-with-baselines.replace}</baselineReplace>
+								<baselineRepositories>
+									<repository>
+										<url>${comparator.repo}</url>
+									</repository>
+								</baselineRepositories>
+							</configuration>
+						</execution>
+					</executions>
+					<configuration>
+						<ignoredPatterns>
+							<pattern>META-INF/ECLIPSE_.RSA</pattern>
+							<pattern>META-INF/ECLIPSE_.SF</pattern>
+							<pattern>about.mappings</pattern>
+							<pattern>index/*</pattern>
+						</ignoredPatterns>
+					</configuration>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-resources-plugin</artifactId>
+					<version>3.3.0</version>
+					<configuration>
+						<encoding>ISO-8859-1</encoding>
+					</configuration>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-antrun-plugin</artifactId>
+					<version>3.1.0</version>
+				</plugin>
+				<plugin>
+					<groupId>org.codehaus.mojo</groupId>
+					<artifactId>findbugs-maven-plugin</artifactId>
+					<version>3.0.5</version>
+					<configuration>
+						<xmlOutput>true</xmlOutput>
+						<excludeFilterFile>releng/findbugs-exclude.xml</excludeFilterFile>
+						<failOnError>false</failOnError>
+					</configuration>
+					<executions>
+						<execution>
+							<goals>
+								<goal>check</goal>
+							</goals>
+						</execution>
+					</executions>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-pmd-plugin</artifactId>
+					<version>3.20.0</version>
+					<configuration>
+						<sourceEncoding>utf-8</sourceEncoding>
+						<minimumTokens>100</minimumTokens>
+						<targetJdk>11</targetJdk>
+						<format>xml</format>
+						<failOnViolation>false</failOnViolation>
+					</configuration>
+					<executions>
+						<execution>
+							<goals>
+								<goal>cpd-check</goal>
+							</goals>
+						</execution>
+					</executions>
+				</plugin>
+				<plugin>
+				<groupId>org.eclipse.tycho.extras</groupId>
+				<artifactId>tycho-eclipserun-plugin</artifactId>
+				<version>${tycho-version}</version>
+				<configuration>
+					<applicationArgs>
+						<arg>-application</arg>
+						<arg>org.eclipse.ant.core.antRunner</arg>
+						<arg>-buildfile</arg>
+						<arg>customBuildCallbacks.xml</arg>
+						<arg>build.index</arg>
+					</applicationArgs>
+					<dependencies>
+						<dependency>
+							<artifactId>org.apache.ant</artifactId>
+							<type>eclipse-plugin</type>
+						</dependency>
+						<dependency>
+							<artifactId>org.eclipse.help.base</artifactId>
+							<type>eclipse-plugin</type>
+						</dependency>
+						<dependency>
+							<artifactId>org.eclipse.ant.core</artifactId>
+							<type>eclipse-plugin</type>
+						</dependency>
+					</dependencies>
+					<!-- This needs to be explicitely set now, see https://bugs.eclipse.org/bugs/show_bug.cgi?id=395281 -->
+					<repositories>
+						<repository>
+							<id>platform</id>
+							<layout>p2</layout>
+							<url>${help-docs-eclipserun-repo}</url>
+						</repository>
+					</repositories>
+				</configuration>
+				<executions>
+					<execution>
+						<goals>
+							<goal>eclipse-run</goal>
+						</goals>
+						<phase>compile</phase>
+						<configuration>
+							<executionEnvironment>JavaSE-17</executionEnvironment>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.eclipse.tycho</groupId>
+				<artifactId>tycho-gpg-plugin</artifactId>
+				<version>${tycho-version}</version>
+				<executions>
+					<execution>
+						<id>pgpsigner</id>
+						<goals>
+						<goal>sign-p2-artifacts</goal>
+						</goals>
+						<configuration>
+							<keyname>4F23165B6AC51B15</keyname>
+							<skipIfJarsigned>false</skipIfJarsigned>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			</plugins>
+		</pluginManagement>
+	</build>
+</project>
